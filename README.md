@@ -14,5 +14,9 @@ xCore-200 Explorer Kit: Console Ant Defender Game
 
 ## How to contribute
 
-1. After a change is made, commit the change: git commit -m "This has been changed"
+1. After a change is made, commit the change: git commit -am "This has been changed"
 2. Push change to master: git push origin master
+
+## Added files
+
+Track newly added files using: git add <filename>
