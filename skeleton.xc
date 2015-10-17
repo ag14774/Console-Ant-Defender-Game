@@ -142,6 +142,13 @@ void userAnt(chanend fromButtons, chanend toVisualiser, chanend toController) {
   }
 }
 
+int toggleDirection(int current){
+  if(current==1)
+    return -1;
+  else
+    return 1;
+}
+
 //ATTACKER PROCESS... The attacker is controlled by this process attackerAnt,
 //                    which has channels to the visualiser and controller
 void attackerAnt(chanend toVisualiser, chanend toController) {
@@ -154,11 +161,22 @@ void attackerAnt(chanend toVisualiser, chanend toController) {
   toVisualiser <: attackerAntPosition;       //show initial position
 
   while (running) {
-  ////////////////////////////////////////////////////////////
-  //
-  // !!! place your code here for attacker behaviour
-  //
-  /////////////////////////////////////////////////////////////
+  //added code starts here
+    moveCounter++;
+    if(moveCounter%31==0 || moveCounter%37==0) //toggle direction according to specs
+      currentDirection = toggleDirection(currentDirection);
+    attemptedAntPosition = keepWithinBounds(attackerAntPosition,0,22,currentDirection);
+
+    toController <: attemptedAntPosition;
+    toController :> moveForbidden;
+
+    if(!moveForbidden)
+      attackerAntPosition = attemptedAntPosition;
+    else
+      currentDirection = toggleDirection(currentDirection);
+
+    toVisualiser <: attackerAntPosition;
+  //added code ends here
   waitMoment();
   }
 }
@@ -176,18 +194,23 @@ void controller(chanend fromAttacker, chanend fromUser) {
   while (!gameEnded) {
     select {
       case fromAttacker :> attempt:
-      /////////////////////////////////////////////////////////////
-      //
-      // !!! place your code here to give permission/deny attacker move or to end game
-      //
-      /////////////////////////////////////////////////////////////
+      //added code starts here
+        if (attempt == lastReportedUserAntPosition)
+          fromAttacker <: 1;
+        else {
+          fromAttacker <: 0;
+          lastReportedAttackerAntPosition = attempt;
+        }
+      //added code ends here
         break;
       case fromUser :> attempt:
       //added code starts here
         if (attempt == lastReportedAttackerAntPosition)
           fromUser <: 1;
-        else
+        else {
           fromUser <: 0;
+          lastReportedUserAntPosition = attempt;
+        }
       //added code ends here
         break;
     }
