@@ -23,26 +23,41 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
 //DISPLAYS an LED pattern
 int showLEDs(out port p, chanend fromVisualiser) {
+  int shutdown = 0;
   int pattern; //1st bit...separate green LED
                //2nd bit...blue LED
                //3rd bit...green LED
                //4th bit...red LED
-  while (1) {
+  while (!shutdown) {
     fromVisualiser :> pattern;   //receive new pattern from visualiser
-    p <: pattern;                //send pattern to LED port
+    if(pattern == 0xFF)
+      shutdown = 1;
+    else
+      p <: pattern;                //send pattern to LED port
   }
+  printf("Led Controller is shutting down\n");
   return 0;
 }
 
 //READ BUTTONS and send button pattern to userAnt
 void buttonListener(in port b, chanend toUserAnt) {
+  int shutdown = 0;
   int r;
-  while (1) {
-    b when pinseq(15)  :> r;    // check that no button is pressed
-    b when pinsneq(15) :> r;    // check if some buttons are pressed
-    if ((r==13) || (r==14))     // if either button is pressed
-    toUserAnt <: r;             // send button pattern to userAnt
+  while (!shutdown) {
+    b when pinseq(15)  :> r;
+    select {
+      case b when pinsneq(15) :> r:
+        //b when pinseq(15)  :> r;    // check that no button is pressed
+        //b when pinsneq(15) :> r;    // check if some buttons are pressed
+        if ((r==13) || (r==14))     // if either button is pressed
+        toUserAnt <: r;             // send button pattern to userAnt
+        break;
+      case toUserAnt :> shutdown:
+        shutdown = 1;
+        break;
+    }
   }
+  printf("Button listener shutting down\n");
 }
 
 //WAIT function
@@ -74,13 +89,14 @@ void consolePrint(unsigned int userAntToDisplay,
 
 //PROCESS THAT COORDINATES DISPLAY
 void visualiser(chanend fromUserAnt, chanend fromAttackerAnt, chanend toLEDs) {
+  int shutdown = 0;
   unsigned int userAntToDisplay = 11;
   unsigned int attackerAntToDisplay = 2;
   int pattern = 0;
   int round = 0;
   int distance = 0;
   int dangerzone = 0;
-  while (1) {
+  while (!shutdown) {
     if (round==0) printstr("ANT DEFENDER GAME (press button to start)\n");
     round++;
     select {
@@ -88,15 +104,23 @@ void visualiser(chanend fromUserAnt, chanend fromAttackerAnt, chanend toLEDs) {
         consolePrint(userAntToDisplay,attackerAntToDisplay);
         break;
       case fromAttackerAnt :> attackerAntToDisplay:
-        consolePrint(userAntToDisplay,attackerAntToDisplay);
+        if(attackerAntToDisplay == 0xFF){
+          shutdown = 1;
+          toLEDs <: 0xFF;
+        }
+        else
+          consolePrint(userAntToDisplay,attackerAntToDisplay);
         break;
     }
-    distance = userAntToDisplay-attackerAntToDisplay;
-    dangerzone = ((attackerAntToDisplay==7) || (attackerAntToDisplay==15));
-    pattern = round%2 + 8 * dangerzone + 2 * ((distance==1) || (distance==-1));
-    if ((attackerAntToDisplay>7)&&(attackerAntToDisplay<15)) pattern = 15;
-    toLEDs <: pattern;
+    if(!shutdown){
+      distance = userAntToDisplay-attackerAntToDisplay;
+      dangerzone = ((attackerAntToDisplay==7) || (attackerAntToDisplay==15));
+      pattern = round%2 + 8 * dangerzone + 2 * ((distance==1) || (distance==-1));
+      if ((attackerAntToDisplay>7)&&(attackerAntToDisplay<15)) pattern = 15;
+      toLEDs <: pattern;
+    }
   }
+  printf("Visualiser is shutting down\n");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -119,27 +143,38 @@ unsigned int keepWithinBounds(unsigned int n,unsigned int low, unsigned int high
 //DEFENDER PROCESS... The defender is controlled by this process userAnt,
 //                    which has channels to a buttonListener, visualiser and controller
 void userAnt(chanend fromButtons, chanend toVisualiser, chanend toController) {
+  int shutdown = 0;
   unsigned int userAntPosition = 11;       //the current defender position
   int buttonInput;                         //the input pattern from the buttonListener
   unsigned int attemptedAntPosition = 0;            //the next attempted defender position after considering button
   int moveForbidden;                       //the verdict of the controller if move is allowed
   toVisualiser <: userAntPosition;         //show initial position
-  while (1) {
-    fromButtons :> buttonInput; //expect values 13 and 14
-    //added code starts here
-    if (buttonInput == 14)
-      attemptedAntPosition = keepWithinBounds(userAntPosition,0,22,-1); //if SW1 pressed, go left
-    else
-      attemptedAntPosition = keepWithinBounds(userAntPosition,0,22,+1); //if SW2 pressed, go right
+  while (!shutdown) {
+    select {
+      case toController :> int control:
+        if(control == 0xFF) {
+          shutdown = 1;
+          fromButtons <: control;
+        }
+        break;
+      case fromButtons :> buttonInput: //expect values 13 and 14
+        //added code starts here
+        if (buttonInput == 14)
+          attemptedAntPosition = keepWithinBounds(userAntPosition,0,22,-1); //if SW1 pressed, go left
+        else
+          attemptedAntPosition = keepWithinBounds(userAntPosition,0,22,+1); //if SW2 pressed, go right
 
-    toController <: attemptedAntPosition; //Ask controller for permission
-    toController :> moveForbidden;
-    if(!moveForbidden)
-      userAntPosition = attemptedAntPosition;
+        toController <: attemptedAntPosition; //Ask controller for permission
+        toController :> moveForbidden;
+        if(!moveForbidden)
+          userAntPosition = attemptedAntPosition;
 
-    //added code ends here
-    toVisualiser <: userAntPosition;
+        //added code ends here
+        toVisualiser <: userAntPosition;
+        break;
+    }
   }
+  printf("User ant is shutting down\n");
 }
 
 int toggleDirection(int current){
@@ -157,10 +192,10 @@ void attackerAnt(chanend toVisualiser, chanend toController) {
   unsigned int attemptedAntPosition;         //the next attempted  position after considering move direction
   int currentDirection = 1;                  //the current direction the attacker is moving
   int moveForbidden = 0;                     //the verdict of the controller if move is allowed
-  int running = 1;                           //indicating the attacker process is alive
+  int shutdown = 0;                           //indicating the attacker process is alive
   toVisualiser <: attackerAntPosition;       //show initial position
 
-  while (running) {
+  while (!shutdown) {
   //added code starts here
     moveCounter++;
     if(moveCounter%31==0 || moveCounter%37==0) //toggle direction according to specs
@@ -176,9 +211,15 @@ void attackerAnt(chanend toVisualiser, chanend toController) {
       currentDirection = toggleDirection(currentDirection);
 
     toVisualiser <: attackerAntPosition;
+
+    if(attackerAntPosition>7 && attackerAntPosition<15){
+      shutdown = 1;
+      toVisualiser <: 0xFF;
+    }
   //added code ends here
-  waitMoment();
+    waitMoment();
   }
+  printf("Attacker ant is shutting down\n");
 }
 
 //COLLISION DETECTOR... the controller process responds to �permission-to-move� requests
@@ -201,6 +242,11 @@ void controller(chanend fromAttacker, chanend fromUser) {
           fromAttacker <: 0;
           lastReportedAttackerAntPosition = attempt;
         }
+
+        if(lastReportedAttackerAntPosition>7 && lastReportedAttackerAntPosition<15){
+          gameEnded = 1;
+          fromUser <: 0xFF;
+        }
       //added code ends here
         break;
       case fromUser :> attempt:
@@ -215,6 +261,7 @@ void controller(chanend fromAttacker, chanend fromUser) {
         break;
     }
   }
+  printf("Controller is shutting down\n");
 }
 
 //MAIN PROCESS defining channels, orchestrating and starting the processes
