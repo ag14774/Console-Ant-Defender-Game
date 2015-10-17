@@ -105,21 +105,37 @@ void visualiser(chanend fromUserAnt, chanend fromAttackerAnt, chanend toLEDs) {
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
+//Keeps an unsigned integer within two bounds
+//Implemented because C99's remainder operator
+//does not work exactly as desired
+unsigned int keepWithinBounds(unsigned int n,unsigned int low, unsigned int high, int leftORright){
+  if(n==low && leftORright<0)
+    return high;
+  else if(n==high && leftORright>0)
+    return low;
+  return n+leftORright;
+}
+
 //DEFENDER PROCESS... The defender is controlled by this process userAnt,
 //                    which has channels to a buttonListener, visualiser and controller
 void userAnt(chanend fromButtons, chanend toVisualiser, chanend toController) {
   unsigned int userAntPosition = 11;       //the current defender position
   int buttonInput;                         //the input pattern from the buttonListener
-  unsigned int attemptedAntPosition = 0;   //the next attempted defender position after considering button
+  unsigned int attemptedAntPosition = 0;            //the next attempted defender position after considering button
   int moveForbidden;                       //the verdict of the controller if move is allowed
   toVisualiser <: userAntPosition;         //show initial position
   while (1) {
     fromButtons :> buttonInput; //expect values 13 and 14
-    ////////////////////////////////////////////////////////////
-    //
-    // !!! place code here for userAnt behaviour
-    //
-    /////////////////////////////////////////////////////////////
+    //added code starts here
+    if (buttonInput == 14)
+      attemptedAntPosition = keepWithinBounds(userAntPosition,0,22,-1); //if SW1 pressed, go left
+    else
+      attemptedAntPosition = keepWithinBounds(userAntPosition,0,22,+1); //if SW2 pressed, go right
+
+    printf("Ant position: %d\n",attemptedAntPosition);
+    userAntPosition = attemptedAntPosition;
+
+    //added code ends here
     toVisualiser <: userAntPosition;
   }
 }
@@ -145,7 +161,7 @@ void attackerAnt(chanend toVisualiser, chanend toController) {
   }
 }
 
-//COLLISION DETECTOR... the controller process responds to ¿permission-to-move¿ requests
+//COLLISION DETECTOR... the controller process responds to ï¿½permission-to-moveï¿½ requests
 //                      from attackerAnt and userAnt. The process also checks if an attackerAnt
 //                      has moved to winning positions.
 void controller(chanend fromAttacker, chanend fromUser) {
