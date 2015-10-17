@@ -132,8 +132,10 @@ void userAnt(chanend fromButtons, chanend toVisualiser, chanend toController) {
     else
       attemptedAntPosition = keepWithinBounds(userAntPosition,0,22,+1); //if SW2 pressed, go right
 
-    printf("Ant position: %d\n",attemptedAntPosition);
-    userAntPosition = attemptedAntPosition;
+    toController <: attemptedAntPosition; //Ask controller for permission
+    toController :> moveForbidden;
+    if(!moveForbidden)
+      userAntPosition = attemptedAntPosition;
 
     //added code ends here
     toVisualiser <: userAntPosition;
@@ -166,7 +168,7 @@ void attackerAnt(chanend toVisualiser, chanend toController) {
 //                      has moved to winning positions.
 void controller(chanend fromAttacker, chanend fromUser) {
   unsigned int lastReportedUserAntPosition = 11;      //position last reported by userAnt
-  unsigned int lastReportedAttackerAntPosition = 5;   //position last reported by attackerAnt
+  unsigned int lastReportedAttackerAntPosition = 2;   //position last reported by attackerAnt
   unsigned int attempt = 0;                           //incoming data from ants
   int gameEnded = 0;                                  //indicates if game is over
   fromUser :> attempt;                                //start game when user moves
@@ -181,11 +183,12 @@ void controller(chanend fromAttacker, chanend fromUser) {
       /////////////////////////////////////////////////////////////
         break;
       case fromUser :> attempt:
-      /////////////////////////////////////////////////////////////
-      //
-      // !!! place your code here to give permission/deny user move
-      //
-      /////////////////////////////////////////////////////////////
+      //added code starts here
+        if (attempt == lastReportedAttackerAntPosition)
+          fromUser <: 1;
+        else
+          fromUser <: 0;
+      //added code ends here
         break;
     }
   }
