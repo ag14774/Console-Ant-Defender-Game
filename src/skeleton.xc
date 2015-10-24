@@ -61,11 +61,11 @@ void buttonListener(in port b, chanend toUserAnt) {
 }
 
 //WAIT function
-void waitMoment() {
+void waitMoment(int duration) {
   timer tmr;
   int waitTime;
   tmr :> waitTime;                       //read current timer value
-  waitTime += 40000000;                  //set waitTime to 0.4s after value
+  waitTime += duration;                  //set waitTime to 0.4s after value
   tmr when timerafter(waitTime) :> void; //wait until waitTime is reached
 }
 
@@ -193,6 +193,10 @@ void attackerAnt(chanend toVisualiser, chanend toController) {
   int currentDirection = 1;                  //the current direction the attacker is moving
   int moveForbidden = 0;                     //the verdict of the controller if move is allowed
   int shutdown = 0;                           //indicating the attacker process is alive
+  int duration = 40000000;
+  const int LOWER_DURATION = 10000000;
+  const int STEP_DURATION = 1000000;
+  const int DECREASE_INTERVAL = 5;
   toVisualiser <: attackerAntPosition;       //show initial position
 
   while (!shutdown) {
@@ -217,7 +221,9 @@ void attackerAnt(chanend toVisualiser, chanend toController) {
       toVisualiser <: 0xFF;
     }
   //added code ends here
-    waitMoment();
+    if(moveCounter%DECREASE_INTERVAL==0 && duration>=LOWER_DURATION)
+      duration-=STEP_DURATION;
+    waitMoment(duration);
   }
   printf("Attacker ant is shutting down\n");
 }
